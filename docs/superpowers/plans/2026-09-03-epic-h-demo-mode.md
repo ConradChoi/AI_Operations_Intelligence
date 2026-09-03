@@ -17,6 +17,8 @@
 - `spend_transactions`/`opportunities`는 anon에게 `organization_id = 'demo-org'` 행만 SELECT 허용, 그 외 쓰기는 전부 금지 (스펙 "접근 & RLS" 섹션).
 - Edge Function `run-spend-analysis`는 별도 함수로 쪼개 배포하지 않고, 하나의 Edge Function 안에서 순수 함수들을 조합한다 (스펙 아키텍처 섹션).
 - 컬럼/테이블명은 `data/AI_Operations_Intelligence_CSV_표준컬럼명세.md`의 Spend 스키마와 스펙의 데이터 모델 표를 그대로 따른다.
+- Node 스크립트(`scripts/*.ts`)와 Vitest 테스트는 `.env.local`을 명시적으로 로드해야 한다(Next.js 개발 서버는 자동 로드하지만 `tsx`/`vitest` 단독 실행은 아니다) — Task 1이 `dotenv` 의존성과 `vitest.setup.ts`를 만들고, Task 9의 `seed-demo.ts`가 이를 사용한다.
+- `supabase functions serve run-spend-analysis`는 백그라운드 장기 실행 프로세스다. 이 프로세스가 필요한 모든 Task(8, 9, 13)는 **이미 떠 있는지 먼저 확인하고, 없으면 그 Task 안에서 직접 백그라운드로 새로 띄운다** — 이전 Task가 띄운 프로세스가 살아있다고 가정하지 않는다(서로 다른 subagent 세션 간에는 보장되지 않음). `supabase start`가 띄우는 Docker 컨테이너(DB/Auth/API)는 호스트에 계속 떠 있으므로 이 규칙의 대상이 아니다.
 
 ---
 
@@ -28,6 +30,8 @@ tsconfig.json
 next.config.mjs
 tailwind.config.ts
 postcss.config.js
+vitest.config.ts
+vitest.setup.ts
 .gitignore
 .env.example
 src/
@@ -79,23 +83,19 @@ tests/
 
 ---
 
-### Task 1: 프로젝트 스캐폴딩 + Git 초기화
+### Task 1: 프로젝트 스캐폴딩
 
 **Files:**
-- Create: `package.json`, `tsconfig.json`, `next.config.mjs`, `tailwind.config.ts`, `postcss.config.js`, `.gitignore`, `.env.example`
+- Create: `package.json`, `tsconfig.json`, `next.config.mjs`, `tailwind.config.ts`, `postcss.config.js`, `vitest.config.ts`, `vitest.setup.ts`, `.env.example`
+- Modify: `.gitignore` (이미 존재 — 항목만 보강, 덮어쓰지 않음)
 - Create: `src/app/layout.tsx`, `src/app/globals.css`, `src/app/page.tsx`
 
 **Interfaces:**
 - Produces: Next.js 앱 골격, 이후 모든 Task가 이 위에서 동작.
 
-- [ ] **Step 1: git 저장소 초기화**
+**참고:** git 저장소는 이미 초기화되어 있고(root commit 존재, `origin` 연결됨), `.gitignore`에도 `node_modules/`, `.next/`, `.env.local`, `.env`, `supabase/.branches`, `supabase/.temp`, `.DS_Store`, `.bkit/`, `.superpowers/`가 이미 들어있다. `git init`은 다시 실행하지 않는다 — 아래 Step 1은 package.json부터 시작한다.
 
-```bash
-cd "/Users/ylia/Documents/service/AI_Operations_Intelligence"
-git init
-```
-
-- [ ] **Step 2: package.json 작성**
+- [ ] **Step 1: package.json 작성**
 
 ```json
 {
@@ -121,6 +121,7 @@ git init
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
     "autoprefixer": "^10.4.19",
+    "dotenv": "^16.4.5",
     "postcss": "^8.4.40",
     "tailwindcss": "^3.4.7",
     "tsx": "^4.16.0",
@@ -130,7 +131,7 @@ git init
 }
 ```
 
-- [ ] **Step 3: tsconfig.json 작성**
+- [ ] **Step 2: tsconfig.json 작성**
 
 ```json
 {
@@ -156,7 +157,7 @@ git init
 }
 ```
 
-- [ ] **Step 4: next.config.mjs 작성**
+- [ ] **Step 3: next.config.mjs 작성**
 
 ```js
 /** @type {import('next').NextConfig} */
@@ -164,7 +165,7 @@ const nextConfig = {};
 export default nextConfig;
 ```
 
-- [ ] **Step 5: Tailwind 설정 작성**
+- [ ] **Step 4: Tailwind 설정 작성**
 
 `tailwind.config.ts`:
 ```ts
@@ -185,7 +186,7 @@ module.exports = {
 };
 ```
 
-- [ ] **Step 6: 앱 골격 작성**
+- [ ] **Step 5: 앱 골격 작성**
 
 `src/app/globals.css`:
 ```css
@@ -233,7 +234,31 @@ export default function HomePage() {
 }
 ```
 
+- [ ] **Step 6: vitest 설정 + .env.local 자동 로드 작성**
+
+`vitest.config.ts`:
+```ts
+import { defineConfig } from 'vitest/config';
+
+export default defineConfig({
+  test: {
+    setupFiles: ['./vitest.setup.ts'],
+  },
+});
+```
+
+`vitest.setup.ts`:
+```ts
+import { config } from 'dotenv';
+
+config({ path: '.env.local' });
+```
+
+이 setup 파일 덕분에 이후 모든 `npm run test` 실행(Task 3의 `tests/rls.test.ts`, Task 9의 `tests/idempotency.test.ts` 포함)이 `.env.local`의 `NEXT_PUBLIC_SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`를 자동으로 읽는다. Next.js 개발 서버(`npm run dev`)는 이미 `.env.local`을 자동 로드하므로 별도 조치가 필요 없다.
+
 - [ ] **Step 7: .gitignore, .env.example 작성**
+
+`.env.local`은 이미 리포지토리 루트 `.gitignore`에 포함되어 있다(초기 설정 시 추가됨). 아래 `.gitignore` 항목이 이미 존재하면 건너뛰고, 없는 항목만 추가한다.
 
 `.gitignore`:
 ```
@@ -265,7 +290,7 @@ Expected: 빌드 성공 (경고는 무방, 에러 없어야 함).
 
 ```bash
 git add -A
-git commit -m "chore: scaffold Next.js app with Tailwind"
+git commit -m "chore: scaffold Next.js app with Tailwind, vitest, dotenv"
 ```
 
 ---
@@ -463,6 +488,8 @@ describe('RLS isolation', () => {
     await admin.from('organizations').upsert({ id: 'other-org', name: 'Other Org' });
     await admin.from('projects').upsert({ id: 'demo-project', organization_id: 'demo-org' });
     await admin.from('projects').upsert({ id: 'other-project', organization_id: 'other-org' });
+    await admin.from('datasets').upsert({ id: 'demo-dataset', project_id: 'demo-project' });
+    await admin.from('datasets').upsert({ id: 'other-dataset', project_id: 'other-project' });
     await admin.from('spend_transactions').upsert({
       id: 'tx_rls_demo',
       dataset_id: 'demo-dataset',
@@ -1557,17 +1584,21 @@ Deno.serve(async (req: Request) => {
 });
 ```
 
-- [ ] **Step 2: 로컬 Edge Function 서버 기동**
+- [ ] **Step 2: 로컬 Edge Function 서버 기동 (이미 떠 있으면 재사용)**
 
 ```bash
-npx supabase functions serve run-spend-analysis --env-file .env.local
+if ! curl -s -o /dev/null -w '%{http_code}' http://localhost:54321/functions/v1/run-spend-analysis | grep -qE '^(200|400|405)$'; then
+  nohup npx supabase functions serve run-spend-analysis --env-file .env.local \
+    > /tmp/supabase-functions-serve.log 2>&1 &
+  sleep 3
+fi
+tail -n 20 /tmp/supabase-functions-serve.log || true
 ```
 
-Expected: `Serving functions on http://localhost:54321/functions/v1/run-spend-analysis` 로그.
+Expected: 로그에 `Serving functions on http://localhost:54321/functions/v1/run-spend-analysis` 가 보이거나(새로 띄운 경우), 이미 응답 중이라 healthcheck를 통과해 그대로 넘어감(이전에 떠 있던 경우). 이 패턴은 Task 9, Task 13에서도 동일하게 재사용한다 — 특정 이전 Task가 띄운 프로세스가 지금도 살아있다고 가정하지 않는다.
 
 - [ ] **Step 3: project_id 없는 요청으로 400 검증**
 
-새 터미널에서:
 ```bash
 curl -s -X POST http://localhost:54321/functions/v1/run-spend-analysis \
   -H "Content-Type: application/json" \
@@ -1839,8 +1870,11 @@ Expected: PASS (5 tests).
 
 `scripts/seed-demo.ts`:
 ```ts
+import { config } from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import { generateDemoTransactions } from './generate-demo-data';
+
+config({ path: '.env.local' });
 
 async function main() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -1907,9 +1941,14 @@ main().catch((err) => {
 });
 ```
 
-- [ ] **Step 6: 시딩 실행**
+- [ ] **Step 6: Edge Function 서버 확인 후 시딩 실행**
 
 ```bash
+if ! curl -s -o /dev/null -w '%{http_code}' http://localhost:54321/functions/v1/run-spend-analysis | grep -qE '^(200|400|405)$'; then
+  nohup npx supabase functions serve run-spend-analysis --env-file .env.local \
+    > /tmp/supabase-functions-serve.log 2>&1 &
+  sleep 3
+fi
 npm run seed:demo
 ```
 
@@ -2275,8 +2314,19 @@ Expected: 모두 PASS.
 
 ```bash
 npx supabase db reset
+
+if ! curl -s -o /dev/null -w '%{http_code}' http://localhost:54321/functions/v1/run-spend-analysis | grep -qE '^(200|400|405)$'; then
+  nohup npx supabase functions serve run-spend-analysis --env-file .env.local \
+    > /tmp/supabase-functions-serve.log 2>&1 &
+  sleep 3
+fi
+
 npm run seed:demo
-npm run dev
+
+if ! curl -s -o /dev/null -w '%{http_code}' http://localhost:3000 | grep -q '200'; then
+  nohup npm run dev > /tmp/next-dev.log 2>&1 &
+  sleep 5
+fi
 ```
 
 - [ ] **Step 3: 랜딩 페이지 → 데모 흐름 수동 클릭 검증**
