@@ -462,11 +462,9 @@ create policy "demo opportunities readable by anyone"
   using (organization_id = 'demo-org');
 ```
 
-- [ ] **Step 3: 마이그레이션 적용**
+- [ ] **Step 3: 마이그레이션 적용 (호스티드 프로젝트 — 컨트롤러가 처리)**
 
-```bash
-npx supabase db reset
-```
+이 프로젝트는 로컬 Docker가 아니라 호스티드 Supabase 프로젝트를 사용한다 (Task 2에서 확정됨). `supabase db reset`은 로컬 전용이므로 사용하지 않는다. 대신 컨트롤러가 Step 2의 SQL을 사용자에게 전달해 Supabase 대시보드 SQL Editor에서 실행하도록 하고, REST API로 정책이 적용됐는지 확인한 뒤(예: anon 키로 `organization_id != 'demo-org'` 행이 조회되지 않는지) 이 Step을 완료 처리한다. 이 Step은 subagent가 아니라 컨트롤러가 직접 수행한다 — subagent는 Step 4부터 시작한다.
 
 - [ ] **Step 4: RLS 격리 테스트 작성 (실패 확인용 시나리오 먼저 서술)**
 
@@ -2310,11 +2308,11 @@ deno test supabase/functions/run-spend-analysis/lib/
 
 Expected: 모두 PASS.
 
-- [ ] **Step 2: 처음부터 다시 시딩해 데모 흐름 재확인**
+- [ ] **Step 2: 다시 시딩해 데모 흐름 재확인 (호스티드 프로젝트 — `db reset` 없음)**
+
+호스티드 Supabase를 쓰므로 로컬 전용 명령인 `supabase db reset`은 사용하지 않는다. `seed-demo.ts`가 이미 project_id 기준으로 delete-then-insert(멱등성, Task 9에서 검증됨)를 수행하므로, 재시딩만으로 "처음부터 다시" 상태를 재현하기에 충분하다.
 
 ```bash
-npx supabase db reset
-
 if ! curl -s -o /dev/null -w '%{http_code}' http://localhost:54321/functions/v1/run-spend-analysis | grep -qE '^(200|400|405)$'; then
   nohup npx supabase functions serve run-spend-analysis --env-file .env.local \
     > /tmp/supabase-functions-serve.log 2>&1 &
@@ -2347,12 +2345,13 @@ Expected (스펙 Success Criteria 대조):
 
 ## 로컬 개발 환경 실행
 
+이 프로젝트는 로컬 Docker Supabase 스택(`supabase start`) 대신 **호스티드 Supabase 프로젝트**(ap-northeast-2, Free tier)를 사용한다. 스키마/RLS 변경은 Supabase 대시보드 SQL Editor에서 직접 실행한다 (`supabase/migrations/`에 SQL은 버전관리용으로 보관).
+
 1. `npm install`
-2. `npx supabase start` (Docker 필요)
-3. `.env.local`에 `npx supabase start` 출력값(API URL, anon key, service_role key) 기입
-4. `npx supabase functions serve run-spend-analysis --env-file .env.local` (별도 터미널)
-5. `npm run seed:demo`
-6. `npm run dev` → http://localhost:3000
+2. `.env.local`에 호스티드 프로젝트의 API URL / anon key / service_role key 기입 (Settings → API)
+3. `npx supabase functions serve run-spend-analysis --env-file .env.local` (별도 터미널, Docker 필요 — 함수 자체만 로컬에서 서빙하고 DB/API는 위 호스티드 프로젝트를 바라봄)
+4. `npm run seed:demo`
+5. `npm run dev` → http://localhost:3000
 ```
 
 ```bash
