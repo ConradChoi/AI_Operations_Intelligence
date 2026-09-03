@@ -1,0 +1,1 @@
+﻿organization_id,case_id,customer_id,order_id,event_id,event_name,event_time,session_id,step_name,step_no,channel,sku,quantity,gross_amount,discount_amount,shipping_amount,currency,payment_method,result,error_code,field_name,device_type,source_channel,cs_type,return_reason,metadata_json
