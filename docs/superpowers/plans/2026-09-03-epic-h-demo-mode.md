@@ -19,6 +19,7 @@
 - 컬럼/테이블명은 `data/AI_Operations_Intelligence_CSV_표준컬럼명세.md`의 Spend 스키마와 스펙의 데이터 모델 표를 그대로 따른다.
 - Node 스크립트(`scripts/*.ts`)와 Vitest 테스트는 `.env.local`을 명시적으로 로드해야 한다(Next.js 개발 서버는 자동 로드하지만 `tsx`/`vitest` 단독 실행은 아니다) — Task 1이 `dotenv` 의존성과 `vitest.setup.ts`를 만들고, Task 9의 `seed-demo.ts`가 이를 사용한다.
 - `supabase functions serve run-spend-analysis`는 백그라운드 장기 실행 프로세스다. 이 프로세스가 필요한 모든 Task(8, 9, 13)는 **이미 떠 있는지 먼저 확인하고, 없으면 그 Task 안에서 직접 백그라운드로 새로 띄운다** — 이전 Task가 띄운 프로세스가 살아있다고 가정하지 않는다(서로 다른 subagent 세션 간에는 보장되지 않음). `supabase start`가 띄우는 Docker 컨테이너(DB/Auth/API)는 호스트에 계속 떠 있으므로 이 규칙의 대상이 아니다.
+- `supabase functions serve --env-file`은 `SUPABASE_`로 시작하는 환경변수명을 예약어로 취급해 항상 로컬 스택 값으로 덮어쓴다(Task 8에서 발견됨). 그래서 Edge Function 코드(`index.ts`)는 호스티드 프로젝트를 가리키기 위해 예약되지 않은 이름 `PROJECT_URL`/`PROJECT_SERVICE_ROLE_KEY`를 읽는다 — `.env.local`에 `NEXT_PUBLIC_SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`와 동일한 값으로 추가해뒀다. 또한 로컬 서버의 JWT 게이트웨이가 호스티드 프로젝트의 service_role JWT를 검증하지 못하므로 `supabase functions serve`는 항상 `--no-verify-jwt`와 함께 실행한다 — 이는 로컬 개발 전용 우회이며 실제 배포에는 해당하지 않는다(배포는 이 플랜 범위 밖).
 
 ---
 
@@ -275,6 +276,12 @@ supabase/.temp
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
+
+# Same values as above, under non-reserved names so
+# `supabase functions serve --env-file` doesn't override them
+# with the local dev stack (see Global Constraints).
+PROJECT_URL=
+PROJECT_SERVICE_ROLE_KEY=
 ```
 
 - [ ] **Step 8: 의존성 설치 및 빌드 확인**
@@ -1507,9 +1514,16 @@ Deno.serve(async (req: Request) => {
     return new Response(JSON.stringify({ error: 'project_id is required' }), { status: 400 });
   }
 
+  // NOTE: `supabase functions serve --env-file` reserves any env var name
+  // starting with SUPABASE_ and silently overrides it with the local dev
+  // stack's own value, regardless of what's in the env file. To reach the
+  // hosted project instead of a local stack, this function reads
+  // non-reserved names (PROJECT_URL / PROJECT_SERVICE_ROLE_KEY) that
+  // `.env.local` sets to the same values as NEXT_PUBLIC_SUPABASE_URL /
+  // SUPABASE_SERVICE_ROLE_KEY.
   const supabase = createClient(
-    Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    Deno.env.get('PROJECT_URL')!,
+    Deno.env.get('PROJECT_SERVICE_ROLE_KEY')!,
   );
 
   const { data: rawTransactions, error: fetchError } = await supabase
@@ -1586,7 +1600,7 @@ Deno.serve(async (req: Request) => {
 
 ```bash
 if ! curl -s -o /dev/null -w '%{http_code}' http://localhost:54321/functions/v1/run-spend-analysis | grep -qE '^(200|400|405)$'; then
-  nohup npx supabase functions serve run-spend-analysis --env-file .env.local \
+  nohup npx supabase functions serve run-spend-analysis --env-file .env.local --no-verify-jwt \
     > /tmp/supabase-functions-serve.log 2>&1 &
   sleep 3
 fi
@@ -1943,7 +1957,7 @@ main().catch((err) => {
 
 ```bash
 if ! curl -s -o /dev/null -w '%{http_code}' http://localhost:54321/functions/v1/run-spend-analysis | grep -qE '^(200|400|405)$'; then
-  nohup npx supabase functions serve run-spend-analysis --env-file .env.local \
+  nohup npx supabase functions serve run-spend-analysis --env-file .env.local --no-verify-jwt \
     > /tmp/supabase-functions-serve.log 2>&1 &
   sleep 3
 fi
@@ -2314,7 +2328,7 @@ Expected: 모두 PASS.
 
 ```bash
 if ! curl -s -o /dev/null -w '%{http_code}' http://localhost:54321/functions/v1/run-spend-analysis | grep -qE '^(200|400|405)$'; then
-  nohup npx supabase functions serve run-spend-analysis --env-file .env.local \
+  nohup npx supabase functions serve run-spend-analysis --env-file .env.local --no-verify-jwt \
     > /tmp/supabase-functions-serve.log 2>&1 &
   sleep 3
 fi
@@ -2348,8 +2362,8 @@ Expected (스펙 Success Criteria 대조):
 이 프로젝트는 로컬 Docker Supabase 스택(`supabase start`) 대신 **호스티드 Supabase 프로젝트**(ap-northeast-2, Free tier)를 사용한다. 스키마/RLS 변경은 Supabase 대시보드 SQL Editor에서 직접 실행한다 (`supabase/migrations/`에 SQL은 버전관리용으로 보관).
 
 1. `npm install`
-2. `.env.local`에 호스티드 프로젝트의 API URL / anon key / service_role key 기입 (Settings → API)
-3. `npx supabase functions serve run-spend-analysis --env-file .env.local` (별도 터미널, Docker 필요 — 함수 자체만 로컬에서 서빙하고 DB/API는 위 호스티드 프로젝트를 바라봄)
+2. `.env.local`에 호스티드 프로젝트의 API URL / anon key / service_role key를 **`NEXT_PUBLIC_SUPABASE_*`/`SUPABASE_SERVICE_ROLE_KEY` 이름과 `PROJECT_URL`/`PROJECT_SERVICE_ROLE_KEY` 이름 양쪽 모두**로 기입 (`.env.example` 참고, Settings → API). 후자가 필요한 이유: `supabase functions serve --env-file`이 `SUPABASE_` 접두사 변수를 로컬 스택 값으로 덮어써버리기 때문.
+3. `npx supabase functions serve run-spend-analysis --env-file .env.local --no-verify-jwt` (별도 터미널, Docker 필요 — 함수 자체만 로컬에서 서빙하고 DB/API는 위 호스티드 프로젝트를 바라봄. `--no-verify-jwt`는 로컬 게이트웨이가 호스티드 프로젝트의 JWT를 검증 못 하기 때문이며 로컬 개발 전용 — 실배포에는 해당 없음)
 4. `npm run seed:demo`
 5. `npm run dev` → http://localhost:3000
 ```
