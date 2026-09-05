@@ -25,9 +25,13 @@ Deno.serve(async (req: Request) => {
     return new Response(JSON.stringify({ error: 'project_id is required' }), { status: 400 });
   }
 
+  // `supabase functions serve --env-file` reserves the SUPABASE_ prefix: any
+  // SUPABASE_* entry in the env file is silently skipped and overridden with
+  // the local dev stack's own values. We read PROJECT_URL / PROJECT_SERVICE_ROLE_KEY
+  // instead so this function actually targets the intended (hosted) project.
   const supabase = createClient(
-    Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    Deno.env.get('PROJECT_URL')!,
+    Deno.env.get('PROJECT_SERVICE_ROLE_KEY')!,
   );
 
   const { data: rawTransactions, error: fetchError } = await supabase
