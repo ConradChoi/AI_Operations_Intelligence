@@ -13,12 +13,26 @@ export interface GenerateOpportunitiesInput {
   recurring: RecurringInfo[];
 }
 
+/**
+ * Ease points contributed to `priority`, keyed by the opportunity's own `effort` label.
+ * Every call site derives `ease` from `EASE[effort]` so the displayed effort label and the
+ * priority score can always be reconciled by anyone reading the opportunities table.
+ */
+const EASE: Record<'low' | 'medium' | 'high', number> = { low: 30, medium: 15, high: 0 };
+
+/**
+ * Fraction of a recurring vendor's annual spend we assume is recoverable by
+ * renegotiating or rightsizing the contract. Heuristic — see design doc Open Risks #2.
+ */
+const RECURRING_SAVINGS_RATE = 0.15;
+
 function priorityScore(impact: number, confidencePct: number, ease: number): number {
   return Math.round(impact + (confidencePct / 100) * 30 + ease);
 }
 
-function impactScore(annualValueKrw: number): number {
-  return Math.max(0, Math.min(40, Math.round((annualValueKrw / 10_000_000) * 40)));
+/** Scores the KRW value of an opportunity (its `estimated_value`) onto a 0-40 impact scale. */
+function impactScore(valueKrw: number): number {
+  return Math.max(0, Math.min(40, Math.round((valueKrw / 10_000_000) * 40)));
 }
 
 export function generateOpportunities(input: GenerateOpportunitiesInput): Opportunity[] {
@@ -28,7 +42,7 @@ export function generateOpportunities(input: GenerateOpportunitiesInput): Opport
   for (const dup of input.duplicates) {
     const impact = impactScore(dup.amount);
     const confidence = 80;
-    const ease = 30;
+    const effort = 'low' as const;
     opportunities.push({
       ...base,
       type: 'DUPLICATE',
@@ -36,8 +50,8 @@ export function generateOpportunities(input: GenerateOpportunitiesInput): Opport
       evidence_json: { transactionIds: dup.transactionIds, amount: dup.amount, daysApart: dup.daysApart },
       estimated_value: dup.amount,
       confidence,
-      effort: 'low',
-      priority: priorityScore(impact, confidence, ease),
+      effort,
+      priority: priorityScore(impact, confidence, EASE[effort]),
     });
   }
 
@@ -45,7 +59,7 @@ export function generateOpportunities(input: GenerateOpportunitiesInput): Opport
     const annualValue = (pc.afterAverage - pc.beforeAverage) * 12;
     const impact = impactScore(annualValue);
     const confidence = 65;
-    const ease = 15;
+    const effort = 'medium' as const;
     opportunities.push({
       ...base,
       type: 'PRICE_INCREASE',
@@ -53,8 +67,8 @@ export function generateOpportunities(input: GenerateOpportunitiesInput): Opport
       evidence_json: { transactionIds: pc.transactionIds, beforeAverage: pc.beforeAverage, afterAverage: pc.afterAverage },
       estimated_value: Math.round(annualValue),
       confidence,
-      effort: 'medium',
-      priority: priorityScore(impact, confidence, ease),
+      effort,
+      priority: priorityScore(impact, confidence, EASE[effort]),
     });
   }
 
@@ -62,7 +76,9 @@ export function generateOpportunities(input: GenerateOpportunitiesInput): Opport
     const excess = an.amount - an.baselineAverage;
     const impact = impactScore(excess);
     const confidence = 55;
-    const ease = 20;
+    // 'medium': acting on a one-off anomaly means investigating what the charge actually was
+    // and chasing an explanation/dispute — not the mechanical refund request a DUPLICATE is.
+    const effort = 'medium' as const;
     opportunities.push({
       ...base,
       type: 'ANOMALY',
@@ -70,25 +86,35 @@ export function generateOpportunities(input: GenerateOpportunitiesInput): Opport
       evidence_json: { transactionId: an.transactionId, amount: an.amount, baselineAverage: an.baselineAverage },
       estimated_value: Math.round(excess),
       confidence,
-      effort: 'low',
-      priority: priorityScore(impact, confidence, ease),
+      effort,
+      priority: priorityScore(impact, confidence, EASE[effort]),
     });
   }
 
   for (const rec of input.recurring) {
     const annualValue = rec.averageAmount * 12;
-    const impact = impactScore(annualValue);
+    // The opportunity is renegotiating/rightsizing the contract, not cancelling the vendor —
+    // so the estimate is a fraction of annual spend, never the whole thing. Full annual spend
+    // is preserved in evidence_json.annualSpend.
+    const estimatedSavings = Math.round(annualValue * RECURRING_SAVINGS_RATE);
+    const impact = impactScore(estimatedSavings);
     const confidence = rec.monthsActive >= 6 ? 85 : rec.monthsActive >= 4 ? 70 : 55;
-    const ease = 25;
+    const effort = 'low' as const;
     opportunities.push({
       ...base,
       type: 'RECURRING_REVIEW',
       title: `${rec.vendorNormalized} 반복결제 검토 (${rec.monthsActive}개월 연속)`,
-      evidence_json: { transactionIds: rec.transactionIds, monthsActive: rec.monthsActive, averageAmount: rec.averageAmount },
-      estimated_value: Math.round(annualValue),
+      evidence_json: {
+        transactionIds: rec.transactionIds,
+        monthsActive: rec.monthsActive,
+        averageAmount: rec.averageAmount,
+        annualSpend: Math.round(annualValue),
+        savingsRate: RECURRING_SAVINGS_RATE,
+      },
+      estimated_value: estimatedSavings,
       confidence,
-      effort: 'low',
-      priority: priorityScore(impact, confidence, ease),
+      effort,
+      priority: priorityScore(impact, confidence, EASE[effort]),
     });
   }
 
