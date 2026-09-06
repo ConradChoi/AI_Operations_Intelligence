@@ -1,6 +1,11 @@
 import { createSupabaseClient } from '@/lib/supabaseClient';
 import { OpportunityTable } from '@/components/spend/OpportunityTable';
 
+// The demo data is re-seeded out-of-band (`npm run seed:demo`). Without this, Next.js would
+// statically prerender this page at build time and the deployed demo would be frozen at
+// whatever the database held when the build ran.
+export const dynamic = 'force-dynamic';
+
 export default async function SpendOpportunitiesPage() {
   const supabase = createSupabaseClient();
   const { data: opportunities } = await supabase

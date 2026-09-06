@@ -3,6 +3,11 @@ import { createSupabaseClient } from '@/lib/supabaseClient';
 import { formatKrw } from '@/lib/format';
 import { KpiCard } from '@/components/spend/KpiCard';
 
+// The demo data is re-seeded out-of-band (`npm run seed:demo`). Without this, Next.js would
+// statically prerender this page at build time and the deployed demo would be frozen at
+// whatever the database held when the build ran.
+export const dynamic = 'force-dynamic';
+
 export default async function SpendOverviewPage() {
   const supabase = createSupabaseClient();
 
