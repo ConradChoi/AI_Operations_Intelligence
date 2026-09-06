@@ -7,3 +7,4 @@ supabase/.temp
 .DS_Store
 .bkit/
 .superpowers/
+tsconfig.tsbuildinfo

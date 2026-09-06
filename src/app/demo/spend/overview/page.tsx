@@ -1,54 +1,137 @@
 import Link from 'next/link';
 import { createSupabaseClient } from '@/lib/supabaseClient';
 import { formatKrw } from '@/lib/format';
-import { KpiCard } from '@/components/spend/KpiCard';
+import { sumByMonth, sumByCategory, topVendors, momDelta } from '@/lib/spendAggregations';
+import { opportunityTypeMeta } from '@/lib/opportunityTypeMeta';
+import { StatTile } from '@/components/spend/StatTile';
+import { CategoryBarChart } from '@/components/spend/CategoryBarChart';
+import { MonthlyTrendChart } from '@/components/spend/MonthlyTrendChart';
+import { TopVendorsTable } from '@/components/spend/TopVendorsTable';
+import { WalletIcon, RepeatIcon, PiggyBankIcon, AlertTriangleIcon } from '@/components/spend/icons';
 
 // The demo data is re-seeded out-of-band (`npm run seed:demo`). Without this, Next.js would
 // statically prerender this page at build time and the deployed demo would be frozen at
 // whatever the database held when the build ran.
 export const dynamic = 'force-dynamic';
 
+interface EvidenceJson {
+  annualSpend?: number;
+}
+
 export default async function SpendOverviewPage() {
   const supabase = createSupabaseClient();
 
   const { data: transactions } = await supabase
     .from('spend_transactions')
-    .select('amount')
+    .select('amount, transaction_date, category, vendor_normalized')
     .eq('project_id', 'demo-project');
 
   const { data: opportunities } = await supabase
     .from('opportunities')
-    .select('id, type, title, estimated_value, confidence')
+    .select('id, type, title, estimated_value, confidence, evidence_json')
     .eq('project_id', 'demo-project')
-    .order('priority', { ascending: false })
-    .limit(3);
+    .order('priority', { ascending: false });
 
-  const totalSpend = (transactions ?? []).reduce((sum, t) => sum + Number(t.amount), 0);
-  const topOpportunities = opportunities ?? [];
-  const topSavings = topOpportunities.reduce((sum, o) => sum + Number(o.estimated_value), 0);
+  const txs = (transactions ?? []).map((t) => ({ ...t, amount: Number(t.amount) }));
+  const opps = (opportunities ?? []).map((o) => ({ ...o, estimated_value: Number(o.estimated_value) }));
+
+  const totalSpend = txs.reduce((sum, t) => sum + t.amount, 0);
+  const monthly = sumByMonth(txs);
+  const delta = momDelta(monthly);
+  const categoryTotals = sumByCategory(txs);
+  const vendors = topVendors(txs, 5);
+
+  const recurringOpportunities = opps.filter((o) => o.type === 'RECURRING_REVIEW');
+  const recurringAnnualSpend = recurringOpportunities.reduce(
+    (sum, o) => sum + ((o.evidence_json as EvidenceJson | null)?.annualSpend ?? 0),
+    0,
+  );
+  const identifiedSavings = opps.reduce((sum, o) => sum + o.estimated_value, 0);
+  const anomalyCount = opps.filter((o) => o.type === 'ANOMALY').length;
+  const topOpportunities = opps.slice(0, 3);
 
   return (
-    <main className="mx-auto max-w-4xl p-8">
-      <h1 className="text-xl font-semibold">그로스핀 — Spend Overview (샘플)</h1>
-      <div className="mt-6 grid grid-cols-3 gap-4">
-        <KpiCard label="Total Spend (9개월)" value={formatKrw(totalSpend)} />
-        <KpiCard label="거래 건수" value={String((transactions ?? []).length)} />
-        <KpiCard label="Top 3 절감후보 합계" value={formatKrw(topSavings)} />
+    <main className="mx-auto max-w-6xl p-8">
+      <h1 className="text-xl font-semibold text-[#0b0b0b]">그로스핀 — Spend Overview (샘플)</h1>
+
+      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatTile
+          label="총 지출"
+          value={formatKrw(totalSpend)}
+          icon={<WalletIcon />}
+          delta={delta ? { pct: delta.deltaPct, label: '전월 대비' } : undefined}
+        />
+        <StatTile
+          label="반복결제 규모"
+          value={formatKrw(recurringAnnualSpend)}
+          icon={<RepeatIcon />}
+          sublabel={`${recurringOpportunities.length}개 벤더 (연간 환산)`}
+        />
+        <StatTile
+          label="식별된 절감액"
+          value={formatKrw(identifiedSavings)}
+          icon={<PiggyBankIcon />}
+          sublabel={`${opps.length}개 절감후보 기준`}
+        />
+        <StatTile
+          label="이상거래"
+          value={`${anomalyCount}건`}
+          icon={<AlertTriangleIcon />}
+          sublabel="즉시 확인 권장"
+        />
       </div>
-      <h2 className="mt-8 text-lg font-medium">Top Opportunities</h2>
-      <ul className="mt-4 space-y-2">
-        {topOpportunities.map((o) => (
-          <li key={o.id} className="rounded border border-gray-200 p-3">
-            <p className="font-medium">{o.title}</p>
-            <p className="text-sm text-gray-500">
-              예상 절감: {formatKrw(Number(o.estimated_value))} · 확신도 {o.confidence}%
-            </p>
-          </li>
-        ))}
-      </ul>
-      <Link href="/demo/spend/opportunities" className="mt-6 inline-block text-blue-600 underline">
-        전체 Savings Opportunity 보기 →
-      </Link>
+
+      <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <section className="rounded-lg border border-[#e1e0d9] p-4">
+          <h2 className="text-sm font-medium text-[#52514e]">카테고리별 지출</h2>
+          <div className="mt-4">
+            <CategoryBarChart data={categoryTotals} />
+          </div>
+        </section>
+        <section className="rounded-lg border border-[#e1e0d9] p-4">
+          <h2 className="text-sm font-medium text-[#52514e]">상위 5개 공급사</h2>
+          <div className="mt-4">
+            <TopVendorsTable vendors={vendors} totalSpend={totalSpend} />
+          </div>
+        </section>
+      </div>
+
+      <section className="mt-6 rounded-lg border border-[#e1e0d9] p-4">
+        <h2 className="text-sm font-medium text-[#52514e]">월별 지출 추이</h2>
+        <div className="mt-4">
+          <MonthlyTrendChart data={monthly} />
+        </div>
+      </section>
+
+      <section className="mt-6 rounded-lg border border-[#e1e0d9] p-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-medium text-[#52514e]">절감후보 하이라이트</h2>
+          <Link href="/demo/spend/opportunities" className="text-sm text-[#2a78d6] underline">
+            전체 보기 →
+          </Link>
+        </div>
+        <ul className="mt-4 space-y-2">
+          {topOpportunities.map((o) => {
+            const meta = opportunityTypeMeta(o.type);
+            return (
+              <li key={o.id} className="flex items-start gap-3 rounded border border-[#e1e0d9] p-3">
+                <span
+                  className="mt-1 h-2 w-2 shrink-0 rounded-full"
+                  style={{ backgroundColor: meta.color }}
+                  aria-hidden="true"
+                />
+                <div>
+                  <p className="text-xs text-[#898781]">{meta.label}</p>
+                  <p className="font-medium text-[#0b0b0b]">{o.title}</p>
+                  <p className="text-sm text-[#52514e]">
+                    예상 절감: {formatKrw(o.estimated_value)} · 확신도 {o.confidence}%
+                  </p>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
     </main>
   );
 }
