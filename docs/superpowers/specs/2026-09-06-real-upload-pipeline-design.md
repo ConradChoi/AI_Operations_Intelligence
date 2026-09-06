@@ -73,8 +73,16 @@ CSV 표준 컬럼 명세의 일반 Quality Score 공식은 Process Mining(event_
 
 Blocker가 하나라도 있으면 Quality Score와 무관하게 진행 불가. 오류행은 CSV로 export 가능(원본 행 + 오류 사유 컬럼 추가).
 
-### 엔진 연동
-Quality 통과 시: (1) Storage에 원본 CSV 업로드, (2) 매핑된 행을 `spend_transactions`에 insert (organization_id/project_id/dataset_id는 이번 세션에서 생성된 실제 값), (3) `run-spend-analysis` Edge Function을 해당 `project_id`로 호출 — Epic H와 동일한 함수, 코드 변경 없음. 로컬 개발 시에는 Epic H와 동일하게 `supabase functions serve`로 로컬 서빙(호스티드 프로젝트 대상, `--no-verify-jwt`) — 이 부분의 로컬/배포 환경 차이는 Epic H 스펙에 이미 문서화된 내용을 그대로 따른다.
+### 엔진 연동 (Rev.2 — 계획 수립 중 확정)
+당초 Epic H의 Edge Function을 HTTP로 호출하는 방식을 검토했으나, **배포된 Amplify 앱에는 로컬 전용으로만 서빙되는 Edge Function이 존재하지 않는다**는 문제가 계획 수립 중 발견됐다(Epic H는 시딩이 개발자의 수동 작업이라 문제가 없었지만, 이번엔 실제 프로덕션 요청 경로가 필요함). Edge Function을 호스티드 프로젝트에 정식 배포하려면 Supabase 개인 액세스 토큰 발급이 필요해 자격증명 노출 범위가 늘어난다.
+
+**확정된 해결책: Next.js Server Action에서 탐지 엔진을 직접 in-process로 호출한다.**
+
+`supabase/functions/run-spend-analysis/lib/*.ts`의 7개 순수 함수는 Deno 전용 API를 전혀 쓰지 않는 순수 TypeScript라, Next.js Server Action에서 그대로 import해 호출할 수 있다. 실제로 검증 완료: `tsconfig.json`에 `allowImportingTsExtensions: true`를 추가하는 것만으로 `tsc --noEmit`/`vitest`/`next build` 전부 `.ts` 확장자가 붙은 상대경로 import(Deno 관례)를 그대로 인식한다. `supabase/functions`는 tsconfig의 `exclude`에 그대로 남아있으므로(exclude는 auto-discover되는 루트 파일만 걸러내고, import 그래프로 끌려온 의존성 파일은 걸러내지 않는다) 기존 `deno test` 워크플로우·Edge Function 자체는 전혀 건드리지 않는다 — 엔진 소스는 여전히 단일 원본 하나뿐이다.
+
+즉 Quality 통과 시: (1) Storage에 원본 CSV 업로드, (2) 매핑된 행을 `spend_transactions`에 insert, (3) Server Action이 같은 요청 안에서 `normalizeVendor`/`categorize`/`detectRecurring`/`detectDuplicates`/`detectPriceChanges`/`scoreAnomalies`/`generateOpportunities`를 순서대로 호출해 `opportunities`에 insert — `index.ts`(Edge Function 엔트리포인트)의 오케스트레이션 로직과 동일한 순서를 Server Action 안에 그대로 재현한다. Edge Function 배포도, HTTP 호출도, `--no-verify-jwt` 로컬 서빙도 이 새 경로에는 필요 없다.
+
+Epic H의 데모(`/demo/spend/*`)는 기존 방식(시딩 스크립트 → 로컬 Edge Function 호출)을 그대로 유지한다 — 변경 없음.
 
 ## Screens & Routes
 
