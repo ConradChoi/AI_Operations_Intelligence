@@ -1,5 +1,6 @@
 import './globals.css';
 import type { ReactNode } from 'react';
+import AuthHeader from '@/components/AuthHeader';
 
 export const metadata = {
   title: 'AI Operations Intelligence — Spend',
@@ -9,7 +10,10 @@ export const metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="ko">
-      <body className="bg-white text-gray-900">{children}</body>
+      <body className="bg-white text-gray-900">
+        <AuthHeader />
+        {children}
+      </body>
     </html>
   );
 }
