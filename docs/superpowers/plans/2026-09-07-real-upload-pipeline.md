@@ -26,7 +26,7 @@
 
 ```
 package.json                                    (add @supabase/ssr, papaparse, @types/papaparse)
-middleware.ts                                    (신규 — /onboarding, /workspace 라우트 보호)
+src/middleware.ts                                (신규 — /onboarding, /workspace 라우트 보호)
 src/lib/supabase/server.ts                       (신규 — SSR 서버 클라이언트)
 src/lib/supabase/admin.ts                        (신규 — service-role 클라이언트, 서버 전용)
 src/lib/columnMapping.ts                         (신규)
@@ -60,7 +60,7 @@ supabase/migrations/<timestamp>_storage_bucket.sql     (신규)
 
 **Files:**
 - Create: `src/lib/supabase/server.ts`, `src/lib/supabase/admin.ts`
-- Create: `middleware.ts`
+- Create: `src/middleware.ts` (Next.js는 `src/` 디렉토리 구조를 쓸 때 미들웨어를 repo 루트가 아니라 `src/middleware.ts`에서 찾는다 — Task 1 구현 중 실증적으로 확인됨)
 - Modify: `package.json` (add `@supabase/ssr`)
 
 **Interfaces:**
@@ -124,7 +124,7 @@ export function createSupabaseAdminClient() {
 
 - [ ] **Step 4: 미들웨어 작성**
 
-`middleware.ts` (레포 루트):
+`src/middleware.ts`:
 ```ts
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
