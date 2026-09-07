@@ -1,14 +1,11 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { headers } from 'next/headers';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { getRequestOrigin } from '@/lib/getOrigin';
 
 export async function signInWithGoogle() {
-  const headersList = headers();
-  const host = headersList.get('x-forwarded-host') ?? headersList.get('host');
-  const protocol = headersList.get('x-forwarded-proto') ?? 'http';
-  const origin = `${protocol}://${host}`;
+  const origin = getRequestOrigin();
 
   const supabase = createSupabaseServerClient();
   const { data, error } = await supabase.auth.signInWithOAuth({
