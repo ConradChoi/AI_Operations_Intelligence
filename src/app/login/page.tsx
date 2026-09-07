@@ -1,4 +1,5 @@
 import { signIn } from './actions';
+import { signInWithGoogle } from '@/app/auth/oauth/actions';
 
 export default function LoginPage({ searchParams }: { searchParams: { error?: string } }) {
   return (
@@ -34,6 +35,19 @@ export default function LoginPage({ searchParams }: { searchParams: { error?: st
         </div>
         <button type="submit" className="w-full rounded bg-[#2a78d6] px-4 py-2 text-white">
           로그인
+        </button>
+      </form>
+      <div className="my-4 flex items-center gap-3 text-xs text-[#898781]">
+        <span className="h-px flex-1 bg-[#e1e0d9]" />
+        또는
+        <span className="h-px flex-1 bg-[#e1e0d9]" />
+      </div>
+      <form action={signInWithGoogle}>
+        <button
+          type="submit"
+          className="w-full rounded border border-[#e1e0d9] px-4 py-2 text-sm text-[#0b0b0b]"
+        >
+          Google로 계속하기
         </button>
       </form>
       <p className="mt-4 text-sm text-[#898781]">
