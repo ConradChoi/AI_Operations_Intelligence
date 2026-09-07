@@ -28,7 +28,6 @@
 package.json                                    (add @supabase/ssr, papaparse, @types/papaparse)
 middleware.ts                                    (신규 — /onboarding, /workspace 라우트 보호)
 src/lib/supabase/server.ts                       (신규 — SSR 서버 클라이언트)
-src/lib/supabase/client.ts                       (신규 — 브라우저 클라이언트)
 src/lib/supabase/admin.ts                        (신규 — service-role 클라이언트, 서버 전용)
 src/lib/columnMapping.ts                         (신규)
 src/lib/columnMapping.test.ts
@@ -60,12 +59,12 @@ supabase/migrations/<timestamp>_storage_bucket.sql     (신규)
 ### Task 1: Supabase SSR 클라이언트 + 미들웨어
 
 **Files:**
-- Create: `src/lib/supabase/server.ts`, `src/lib/supabase/client.ts`, `src/lib/supabase/admin.ts`
+- Create: `src/lib/supabase/server.ts`, `src/lib/supabase/admin.ts`
 - Create: `middleware.ts`
 - Modify: `package.json` (add `@supabase/ssr`)
 
 **Interfaces:**
-- Produces: `createSupabaseServerClient()`, `createSupabaseBrowserClient()`, `createSupabaseAdminClient()` — 이후 모든 인증/DB 작업 Task가 이 세 함수를 사용.
+- Produces: `createSupabaseServerClient()`, `createSupabaseAdminClient()` — 이후 모든 인증/DB 작업 Task가 이 두 함수를 사용. (브라우저 전용 클라이언트는 만들지 않는다 — 이 계획의 모든 인증/DB 작업은 Server Action이나 Server Component에서 이뤄지므로 클라이언트 사이드 Supabase 접근이 필요 없다.)
 
 - [ ] **Step 1: 의존성 추가**
 
@@ -108,21 +107,7 @@ export function createSupabaseServerClient() {
 }
 ```
 
-- [ ] **Step 3: 브라우저 클라이언트 작성**
-
-`src/lib/supabase/client.ts`:
-```ts
-import { createBrowserClient } from '@supabase/ssr';
-
-export function createSupabaseBrowserClient() {
-  return createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  );
-}
-```
-
-- [ ] **Step 4: Admin(service-role) 클라이언트 작성**
+- [ ] **Step 3: Admin(service-role) 클라이언트 작성**
 
 `src/lib/supabase/admin.ts`:
 ```ts
@@ -137,7 +122,7 @@ export function createSupabaseAdminClient() {
 }
 ```
 
-- [ ] **Step 5: 미들웨어 작성**
+- [ ] **Step 4: 미들웨어 작성**
 
 `middleware.ts` (레포 루트):
 ```ts
@@ -183,7 +168,7 @@ export const config = {
 };
 ```
 
-- [ ] **Step 6: 빌드 확인**
+- [ ] **Step 5: 빌드 확인**
 
 ```bash
 npx tsc --noEmit
@@ -192,7 +177,7 @@ npm run build
 
 Expected: 에러 없음.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add package.json package-lock.json src/lib/supabase middleware.ts
