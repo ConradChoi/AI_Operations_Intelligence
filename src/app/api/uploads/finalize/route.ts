@@ -24,6 +24,15 @@ interface FinalizeUploadInput {
 // SUPABASE_SERVICE_ROLE_KEY)을 못 읽는 경우가 확인되어, admin 클라이언트가
 // 필요한 로직은 Server Action이 아니라 API 라우트로 둔다 (route.ts는 정상 동작 확인됨).
 export async function POST(request: Request) {
+  try {
+    return await handleFinalizeUpload(request);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.';
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+  }
+}
+
+async function handleFinalizeUpload(request: Request) {
   const input = (await request.json()) as FinalizeUploadInput;
 
   const supabase = createSupabaseServerClient();
