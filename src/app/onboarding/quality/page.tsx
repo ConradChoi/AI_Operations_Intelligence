@@ -51,11 +51,13 @@ export default function OnboardingQualityPage() {
     setError(null);
     try {
       const fileBuffer = await file.arrayBuffer();
+      // Convert ArrayBuffer to Uint8Array for Server Action serialization
+      const uint8Array = new Uint8Array(fileBuffer);
       const result = await finalizeUpload({
         organizationId,
         projectId,
         fileName: file.name,
-        fileBuffer,
+        fileBuffer: Array.from(uint8Array),
         rows: mappedRows,
       });
       router.push(`/workspace/${result.organizationId}/spend/overview`);

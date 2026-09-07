@@ -17,7 +17,7 @@ export interface FinalizeUploadInput {
   organizationId: string;
   projectId: string;
   fileName: string;
-  fileBuffer: ArrayBuffer;
+  fileBuffer: number[] | ArrayBuffer;
   rows: QualityRow[];
 }
 
@@ -46,9 +46,14 @@ export async function finalizeUpload(input: FinalizeUploadInput): Promise<Finali
 
   const datasetId = randomUUID();
 
+  // Convert fileBuffer to Buffer - handle both array and ArrayBuffer
+  const buffer = Array.isArray(input.fileBuffer)
+    ? Buffer.from(input.fileBuffer)
+    : Buffer.from(input.fileBuffer);
+
   const { error: uploadError } = await admin.storage
     .from('spend-uploads')
-    .upload(`${input.organizationId}/${datasetId}/${input.fileName}`, Buffer.from(input.fileBuffer), {
+    .upload(`${input.organizationId}/${datasetId}/${input.fileName}`, buffer, {
       contentType: 'text/csv',
     });
   if (uploadError) throw new Error(`파일 업로드 실패: ${uploadError.message}`);
