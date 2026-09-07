@@ -37,6 +37,8 @@ export async function createWorkspace(name: string, industry: string): Promise<C
 
     return { ok: true, organizationId, projectId };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.' };
+    const message = err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.';
+    const debug = `hasKey=${Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY)} len=${process.env.SUPABASE_SERVICE_ROLE_KEY?.length ?? 0}`;
+    return { ok: false, error: `${message} [${debug}]` };
   }
 }
