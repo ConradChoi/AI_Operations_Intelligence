@@ -20,9 +20,9 @@ interface FinalizeUploadInput {
   rows: QualityRow[];
 }
 
-// AWS Amplify에서는 Server Action이 process.env의 서버 전용 시크릿(예:
-// SUPABASE_SERVICE_ROLE_KEY)을 못 읽는 경우가 확인되어, admin 클라이언트가
-// 필요한 로직은 Server Action이 아니라 API 라우트로 둔다 (route.ts는 정상 동작 확인됨).
+// AWS Amplify Hosting은 콘솔에 등록한 일반(비 NEXT_PUBLIC_) 환경변수를 기본적으로
+// SSR 런타임에 넘기지 않는다 — amplify.yml의 build 단계에서 명시적으로
+// .env.production에 적어줘야 한다. (참고: docs.aws.amazon.com/amplify/latest/userguide/ssr-environment-variables.html)
 export async function POST(request: Request) {
   try {
     return await handleFinalizeUpload(request);
