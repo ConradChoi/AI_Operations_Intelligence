@@ -44,6 +44,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, organizationId, projectId });
   } catch (err) {
     const message = err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.';
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    const debug = `hasKey=${Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY)} len=${process.env.SUPABASE_SERVICE_ROLE_KEY?.length ?? 0}`;
+    return NextResponse.json({ ok: false, error: `${message} [${debug}]` }, { status: 500 });
   }
 }
