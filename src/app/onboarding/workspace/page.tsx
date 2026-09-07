@@ -17,14 +17,14 @@ export default function OnboardingWorkspacePage() {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
-    try {
-      const result = await createWorkspace(name, industry);
-      setWorkspace(result.organizationId, result.projectId);
-      router.push('/onboarding/upload');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '알 수 없는 오류');
+    const result = await createWorkspace(name, industry);
+    if (!result.ok) {
+      setError(result.error);
       setSubmitting(false);
+      return;
     }
+    setWorkspace(result.organizationId, result.projectId);
+    router.push('/onboarding/upload');
   }
 
   return (
