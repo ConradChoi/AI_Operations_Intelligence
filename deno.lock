@@ -48,6 +48,7 @@
         "npm:postcss@^8.4.40",
         "npm:react-dom@^18.3.1",
         "npm:react@^18.3.1",
+        "npm:recharts@^3.10.1",
         "npm:tailwindcss@^3.4.7",
         "npm:tsx@^4.16.0",
         "npm:typescript@^5.5.4",
