@@ -102,7 +102,8 @@ export async function finalizeUpload(input: FinalizeUploadInput): Promise<Finali
     if (opportunityError) throw new Error(`분석 결과 저장 실패: ${opportunityError.message}`);
   }
 
-  await admin.from('datasets').update({ status: 'analyzed' }).eq('id', datasetId);
+  const { error: statusError } = await admin.from('datasets').update({ status: 'analyzed' }).eq('id', datasetId);
+  if (statusError) throw new Error(`데이터셋 상태 업데이트 실패: ${statusError.message}`);
 
   return { organizationId: input.organizationId, datasetId, opportunitiesCount: opportunities.length };
 }
