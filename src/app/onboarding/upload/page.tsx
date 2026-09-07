@@ -4,6 +4,22 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Papa from 'papaparse';
 import { useOnboarding } from '../OnboardingContext';
+import { STANDARD_FIELDS } from '@/lib/columnMapping';
+
+const TEMPLATE_EXAMPLE_ROW = ['TXN-0001', '2026-01-15', 'AWS', '120000', 'KRW', '개발팀', '클라우드 인프라 비용'];
+
+function downloadTemplate() {
+  const headers = STANDARD_FIELDS.map((f) => f.field);
+  const lines = [headers.join(','), TEMPLATE_EXAMPLE_ROW.join(',')];
+  // 엑셀에서 한글이 깨지지 않도록 UTF-8 BOM을 붙인다.
+  const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'spend_upload_template.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 export default function OnboardingUploadPage() {
   const router = useRouter();
@@ -41,6 +57,12 @@ export default function OnboardingUploadPage() {
   return (
     <main className="mx-auto max-w-4xl p-8">
       <h1 className="text-xl font-semibold">CSV 업로드</h1>
+      <p className="mt-2 text-sm text-[#898781]">
+        아래 양식에 맞춰 준비하시면 컬럼 매핑이 더 정확해집니다.{' '}
+        <button type="button" onClick={downloadTemplate} className="text-[#2a78d6] underline">
+          업로드 양식 다운로드
+        </button>
+      </p>
       <input
         type="file"
         accept=".csv"
