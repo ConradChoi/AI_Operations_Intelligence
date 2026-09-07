@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useOnboarding } from '../OnboardingContext';
 import { checkQuality, type QualityRow } from '@/lib/csvQuality';
-import { finalizeUpload } from './actions';
+import type { FinalizeUploadResult } from './types';
 
 export default function OnboardingQualityPage() {
   const router = useRouter();
@@ -51,15 +51,24 @@ export default function OnboardingQualityPage() {
     setError(null);
     try {
       const fileBuffer = await file.arrayBuffer();
-      // Convert ArrayBuffer to Uint8Array for Server Action serialization
       const uint8Array = new Uint8Array(fileBuffer);
-      const result = await finalizeUpload({
-        organizationId,
-        projectId,
-        fileName: file.name,
-        fileBuffer: Array.from(uint8Array),
-        rows: mappedRows,
+      const res = await fetch('/api/uploads/finalize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          organizationId,
+          projectId,
+          fileName: file.name,
+          fileBuffer: Array.from(uint8Array),
+          rows: mappedRows,
+        }),
       });
+      const result = (await res.json()) as FinalizeUploadResult;
+      if (!result.ok) {
+        setError(result.error);
+        setSubmitting(false);
+        return;
+      }
       router.push(`/workspace/${result.organizationId}/spend/overview`);
     } catch (err) {
       setError(err instanceof Error ? err.message : '분석 시작에 실패했습니다.');

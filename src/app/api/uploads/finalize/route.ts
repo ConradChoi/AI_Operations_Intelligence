@@ -1,6 +1,5 @@
-'use server';
-
 import { randomUUID } from 'crypto';
+import { NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import type { QualityRow } from '@/lib/csvQuality';
@@ -13,26 +12,27 @@ import { scoreAnomalies } from '@engine/scoreAnomalies.ts';
 import { generateOpportunities } from '@engine/generateOpportunities.ts';
 import type { SpendTransaction } from '@engine/types.ts';
 
-export interface FinalizeUploadInput {
+interface FinalizeUploadInput {
   organizationId: string;
   projectId: string;
   fileName: string;
-  fileBuffer: number[] | ArrayBuffer;
+  fileBuffer: number[];
   rows: QualityRow[];
 }
 
-export interface FinalizeUploadResult {
-  organizationId: string;
-  datasetId: string;
-  opportunitiesCount: number;
-}
+// AWS Amplify에서는 Server Action이 process.env의 서버 전용 시크릿(예:
+// SUPABASE_SERVICE_ROLE_KEY)을 못 읽는 경우가 확인되어, admin 클라이언트가
+// 필요한 로직은 Server Action이 아니라 API 라우트로 둔다 (route.ts는 정상 동작 확인됨).
+export async function POST(request: Request) {
+  const input = (await request.json()) as FinalizeUploadInput;
 
-export async function finalizeUpload(input: FinalizeUploadInput): Promise<FinalizeUploadResult> {
   const supabase = createSupabaseServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) throw new Error('로그인이 필요합니다.');
+  if (!user) {
+    return NextResponse.json({ ok: false, error: '로그인이 필요합니다.' }, { status: 401 });
+  }
 
   const admin = createSupabaseAdminClient();
 
@@ -42,21 +42,21 @@ export async function finalizeUpload(input: FinalizeUploadInput): Promise<Finali
     .eq('organization_id', input.organizationId)
     .eq('user_id', user.id)
     .maybeSingle();
-  if (!membership) throw new Error('이 조직에 대한 권한이 없습니다.');
+  if (!membership) {
+    return NextResponse.json({ ok: false, error: '이 조직에 대한 권한이 없습니다.' }, { status: 403 });
+  }
 
   const datasetId = randomUUID();
-
-  // Convert fileBuffer to Buffer - handle both array and ArrayBuffer
-  const buffer = Array.isArray(input.fileBuffer)
-    ? Buffer.from(input.fileBuffer)
-    : Buffer.from(input.fileBuffer);
+  const buffer = Buffer.from(input.fileBuffer);
 
   const { error: uploadError } = await admin.storage
     .from('spend-uploads')
     .upload(`${input.organizationId}/${datasetId}/${input.fileName}`, buffer, {
       contentType: 'text/csv',
     });
-  if (uploadError) throw new Error(`파일 업로드 실패: ${uploadError.message}`);
+  if (uploadError) {
+    return NextResponse.json({ ok: false, error: `파일 업로드 실패: ${uploadError.message}` });
+  }
 
   const { error: datasetError } = await admin.from('datasets').insert({
     id: datasetId,
@@ -65,7 +65,9 @@ export async function finalizeUpload(input: FinalizeUploadInput): Promise<Finali
     schema_type: 'spend',
     status: 'uploaded',
   });
-  if (datasetError) throw new Error(`데이터셋 생성 실패: ${datasetError.message}`);
+  if (datasetError) {
+    return NextResponse.json({ ok: false, error: `데이터셋 생성 실패: ${datasetError.message}` });
+  }
 
   const transactions: SpendTransaction[] = input.rows.map((row, i) => {
     const vendorNormalized = normalizeVendor(row.vendor_name_raw);
@@ -84,7 +86,9 @@ export async function finalizeUpload(input: FinalizeUploadInput): Promise<Finali
   });
 
   const { error: insertError } = await admin.from('spend_transactions').insert(transactions.map((t) => ({ ...t })));
-  if (insertError) throw new Error(`거래 데이터 저장 실패: ${insertError.message}`);
+  if (insertError) {
+    return NextResponse.json({ ok: false, error: `거래 데이터 저장 실패: ${insertError.message}` });
+  }
 
   const recurring = detectRecurring(transactions);
   const duplicates = detectDuplicates(transactions);
@@ -100,15 +104,26 @@ export async function finalizeUpload(input: FinalizeUploadInput): Promise<Finali
   });
 
   const { error: deleteOppError } = await admin.from('opportunities').delete().eq('project_id', input.projectId);
-  if (deleteOppError) throw new Error(`기존 분석 결과 삭제 실패: ${deleteOppError.message}`);
+  if (deleteOppError) {
+    return NextResponse.json({ ok: false, error: `기존 분석 결과 삭제 실패: ${deleteOppError.message}` });
+  }
 
   if (opportunities.length > 0) {
     const { error: opportunityError } = await admin.from('opportunities').insert(opportunities);
-    if (opportunityError) throw new Error(`분석 결과 저장 실패: ${opportunityError.message}`);
+    if (opportunityError) {
+      return NextResponse.json({ ok: false, error: `분석 결과 저장 실패: ${opportunityError.message}` });
+    }
   }
 
   const { error: statusError } = await admin.from('datasets').update({ status: 'analyzed' }).eq('id', datasetId);
-  if (statusError) throw new Error(`데이터셋 상태 업데이트 실패: ${statusError.message}`);
+  if (statusError) {
+    return NextResponse.json({ ok: false, error: `데이터셋 상태 업데이트 실패: ${statusError.message}` });
+  }
 
-  return { organizationId: input.organizationId, datasetId, opportunitiesCount: opportunities.length };
+  return NextResponse.json({
+    ok: true,
+    organizationId: input.organizationId,
+    datasetId,
+    opportunitiesCount: opportunities.length,
+  });
 }

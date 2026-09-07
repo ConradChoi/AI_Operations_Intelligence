@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { useOnboarding } from '../OnboardingContext';
-import { createWorkspace } from './actions';
+import type { CreateWorkspaceResult } from './types';
 
 export default function OnboardingWorkspacePage() {
   const router = useRouter();
@@ -17,7 +17,12 @@ export default function OnboardingWorkspacePage() {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
-    const result = await createWorkspace(name, industry);
+    const res = await fetch('/api/workspaces', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, industry }),
+    });
+    const result = (await res.json()) as CreateWorkspaceResult;
     if (!result.ok) {
       setError(result.error);
       setSubmitting(false);
