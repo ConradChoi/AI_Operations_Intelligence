@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 const GOALS = [
   { key: 'donation', label: '후원 결제 전환', enabled: false },
@@ -7,7 +9,24 @@ const GOALS = [
   { key: 'combined', label: '통합 진단', enabled: false },
 ];
 
-export default function OnboardingGoalPage() {
+export default async function OnboardingGoalPage() {
+  const supabase = createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (user) {
+    const { data: membership } = await supabase
+      .from('memberships')
+      .select('organization_id')
+      .eq('user_id', user.id)
+      .limit(1)
+      .maybeSingle();
+    if (membership) {
+      redirect(`/workspace/${membership.organization_id}/spend/overview`);
+    }
+  }
+
   return (
     <main className="mx-auto max-w-2xl p-8">
       <h1 className="text-xl font-semibold">무엇을 개선하고 싶으세요?</h1>
