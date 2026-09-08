@@ -99,10 +99,24 @@ async function handleFinalizeUpload(request: Request) {
     return NextResponse.json({ ok: false, error: `거래 데이터 저장 실패: ${insertError.message}` });
   }
 
-  const recurring = detectRecurring(transactions);
-  const duplicates = detectDuplicates(transactions);
-  const priceChanges = detectPriceChanges(transactions, recurring);
-  const anomalies = scoreAnomalies(transactions);
+  // 이번에 올린 파일만이 아니라, 이 프로젝트에 누적된 전체 거래를 기준으로 재분석해야
+  // 재업로드 시 이전 데이터의 절감 후보가 사라지지 않는다.
+  const { data: allTxRows, error: allTxError } = await admin
+    .from('spend_transactions')
+    .select('*')
+    .eq('project_id', input.projectId);
+  if (allTxError) {
+    return NextResponse.json({ ok: false, error: `전체 거래 조회 실패: ${allTxError.message}` });
+  }
+  const allTransactions: SpendTransaction[] = (allTxRows ?? []).map((t) => ({
+    ...t,
+    amount: Number(t.amount),
+  })) as SpendTransaction[];
+
+  const recurring = detectRecurring(allTransactions);
+  const duplicates = detectDuplicates(allTransactions);
+  const priceChanges = detectPriceChanges(allTransactions, recurring);
+  const anomalies = scoreAnomalies(allTransactions);
   const opportunities = generateOpportunities({
     projectId: input.projectId,
     organizationId: input.organizationId,

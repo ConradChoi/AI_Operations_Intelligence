@@ -64,7 +64,15 @@ export default async function WorkspaceSpendOverviewPage({ params }: { params: {
 
   return (
     <main className="mx-auto max-w-6xl p-8">
-      <h1 className="text-xl font-semibold text-[#0b0b0b]">Spend Overview</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-semibold text-[#0b0b0b]">Spend Overview</h1>
+        <Link
+          href={`/onboarding/upload?orgId=${params.orgId}&projectId=${project.id}`}
+          className="rounded border border-[#e1e0d9] px-3 py-1.5 text-sm text-[#0b0b0b] hover:border-[#2a78d6]"
+        >
+          새 데이터 업로드
+        </Link>
+      </div>
 
       <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatTile

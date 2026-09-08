@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Papa from 'papaparse';
 import { useOnboarding } from '../OnboardingContext';
 import { STANDARD_FIELDS } from '@/lib/columnMapping';
@@ -23,11 +23,22 @@ function downloadTemplate() {
 
 export default function OnboardingUploadPage() {
   const router = useRouter();
-  const { setUpload } = useOnboarding();
+  const searchParams = useSearchParams();
+  const { organizationId, setWorkspace, setUpload } = useOnboarding();
   const [error, setError] = useState<string | null>(null);
   const [previewHeaders, setPreviewHeaders] = useState<string[]>([]);
   const [previewRows, setPreviewRows] = useState<Record<string, string>[]>([]);
   const [ready, setReady] = useState(false);
+
+  // 기존 워크스페이스에 데이터를 추가로 올리는 경우, 워크스페이스 생성 단계를
+  // 건너뛰고 URL의 orgId/projectId로 온보딩 컨텍스트를 채운다.
+  useEffect(() => {
+    const orgId = searchParams.get('orgId');
+    const projId = searchParams.get('projectId');
+    if (orgId && projId && !organizationId) {
+      setWorkspace(orgId, projId);
+    }
+  }, [searchParams, organizationId, setWorkspace]);
 
   function handleFile(file: File) {
     setError(null);
