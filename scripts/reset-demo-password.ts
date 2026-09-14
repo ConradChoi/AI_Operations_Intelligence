@@ -5,7 +5,7 @@ config({ path: '.env.local' });
 
 // 셸/.env 파싱을 거치지 않도록 비밀번호를 코드에 직접 리터럴로 넣어 재설정한다.
 const EMAIL = 'demo@ylia.io';
-const PASSWORD = '2jhjh0817!';
+const PASSWORD = '2Jhjh0817!';
 
 async function main() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
