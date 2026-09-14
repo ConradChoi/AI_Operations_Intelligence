@@ -2,6 +2,7 @@ import { type EmailOtpType } from '@supabase/supabase-js';
 import { type NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { getRequestOrigin } from '@/lib/getOrigin';
+import { getPostLoginRedirect } from '@/lib/postLoginRedirect';
 
 // 이메일 확인 링크가 도착하는 곳. Supabase Auth 이메일 템플릿의 "Confirm signup" 링크가
 // `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email` 형태로
@@ -12,12 +13,16 @@ export async function GET(request: NextRequest) {
   const origin = getRequestOrigin();
   const tokenHash = searchParams.get('token_hash');
   const type = searchParams.get('type') as EmailOtpType | null;
-  const next = searchParams.get('next') ?? '/onboarding/goal';
+  const nextParam = searchParams.get('next');
 
   if (tokenHash && type) {
     const supabase = createSupabaseServerClient();
     const { error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
     if (!error) {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      const next = nextParam ?? getPostLoginRedirect(user?.email);
       return NextResponse.redirect(`${origin}${next}`);
     }
   }

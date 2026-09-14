@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { getRequestOrigin } from '@/lib/getOrigin';
+import { getPostLoginRedirect } from '@/lib/postLoginRedirect';
 
 export async function signUp(formData: FormData) {
   const email = String(formData.get('email') ?? '');
@@ -31,5 +32,5 @@ export async function signUp(formData: FormData) {
     redirect('/signup?checkEmail=1');
   }
 
-  redirect('/onboarding/goal');
+  redirect(getPostLoginRedirect(email));
 }

@@ -2,6 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { getPostLoginRedirect } from '@/lib/postLoginRedirect';
 
 export async function signIn(formData: FormData) {
   const email = String(formData.get('email') ?? '');
@@ -14,5 +15,5 @@ export async function signIn(formData: FormData) {
     redirect(`/login?error=${encodeURIComponent(error.message)}`);
   }
 
-  redirect('/onboarding/goal');
+  redirect(getPostLoginRedirect(email));
 }
